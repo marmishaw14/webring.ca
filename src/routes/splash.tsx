@@ -139,7 +139,7 @@ function AboutContent() {
   )
 }
 
-function SitePreviewContent({ active }: { active: Member[] }) {
+function SitePreviewContent() {
   return (
     <div class="preview-inner" id="preview-panel">
       {/* Skeleton loading state */}
@@ -156,7 +156,7 @@ function SitePreviewContent({ active }: { active: Member[] }) {
         <div class="preview-fallback-card">
           <span class="preview-fallback-name" id="preview-fallback-name"></span>
           <span class="preview-fallback-meta" id="preview-fallback-meta"></span>
-          <a class="preview-fallback-link" id="preview-fallback-link" href="#" target="_blank" rel="noopener noreferrer">
+          <a class="preview-fallback-link" id="preview-fallback-link" href="javascript:void(0)" target="_blank" rel="noopener noreferrer">
             Visit site {raw('&rarr;')}
           </a>
         </div>
@@ -164,14 +164,14 @@ function SitePreviewContent({ active }: { active: Member[] }) {
 
       {/* Controls overlay */}
       <div class="preview-controls" id="preview-controls">
-        <button class="preview-nav preview-nav-prev" id="preview-prev" aria-label="Previous member">{raw('&#8592;')}</button>
+        <button type="button" class="preview-nav preview-nav-prev" id="preview-prev" aria-label="Previous member">{raw('&#8592;')}</button>
         <div class="preview-info">
           <span class="preview-member-name" id="preview-name"></span>
           <span class="preview-member-sep">{raw('&middot;')}</span>
           <span class="preview-member-city" id="preview-city"></span>
         </div>
-        <button class="preview-nav preview-nav-next" id="preview-next" aria-label="Next member">{raw('&#8594;')}</button>
-        <a class="preview-open" id="preview-open" href="#" target="_blank" rel="noopener noreferrer" aria-label="Open site in new tab">{raw('&#8599;')}</a>
+        <button type="button" class="preview-nav preview-nav-next" id="preview-next" aria-label="Next member">{raw('&#8594;')}</button>
+        <a class="preview-open" id="preview-open" href="javascript:void(0)" target="_blank" rel="noopener noreferrer" aria-label="Open site in new tab">{raw('&#8599;')}</a>
       </div>
     </div>
   )
@@ -207,12 +207,19 @@ const TYPE_COLORS: Record<string, string> = {
 function DirectoryContent({ active }: { active: Member[] }) {
   const uniqueCities = new Set(active.map(m => m.city).filter(Boolean)).size
   const uniqueTypes = new Set(active.map(m => m.type)).size
-  const ringRadius = 130
-  const cx = 180
-  const cy = 180
+
+  const ringData = active.map(m => ({
+    slug: m.slug,
+    name: m.name,
+    url: m.url,
+    city: m.city,
+    type: m.type,
+  }))
 
   return (
     <div class="directory-inner">
+      {raw(`<script id="ring-data" type="application/json">${JSON.stringify(ringData)}</script>`)}
+
       {/* Left: member directory */}
       <div class="directory-list-wrap">
         <h2 class="directory-title">Directory</h2>
@@ -237,33 +244,9 @@ function DirectoryContent({ active }: { active: Member[] }) {
         </div>
       </div>
 
-      {/* Right: ring visualization + stats */}
+      {/* Right: D3 interactive ring + stats */}
       <div class="directory-ring-wrap" id="directory-ring">
-        <svg class="directory-ring-svg" viewBox="0 0 360 360" xmlns="http://www.w3.org/2000/svg">
-          <circle cx={cx} cy={cy} r={ringRadius} class="directory-ring-circle" />
-          {active.map((m, i) => {
-            const angle = (i / active.length) * Math.PI * 2 - Math.PI / 2
-            const x = cx + Math.cos(angle) * ringRadius
-            const y = cy + Math.sin(angle) * ringRadius
-            const nextAngle = ((i + 1) / active.length) * Math.PI * 2 - Math.PI / 2
-            const nx = cx + Math.cos(nextAngle) * ringRadius
-            const ny = cy + Math.sin(nextAngle) * ringRadius
-            const color = TYPE_COLORS[m.type] ?? TYPE_COLORS.other
-
-            return (
-              <g class="ring-node" id={`ring-node-${m.slug}`}>
-                <path
-                  d={`M${x},${y} A${ringRadius},${ringRadius} 0 0,1 ${nx},${ny}`}
-                  class="ring-node-arc"
-                  style={`stroke: ${color}`}
-                />
-                <circle cx={x} cy={y} r="16" class="ring-node-bg" style={`fill: ${color}`} />
-                <text x={x} y={y + 1} class="ring-node-initial">{m.name.charAt(0)}</text>
-                <text x={x} y={y + (y > cy ? 28 : -20)} class="ring-node-label">{m.name.split(' ')[0]}</text>
-              </g>
-            )
-          })}
-        </svg>
+        <div id="ring-viz"></div>
 
         <div class="directory-stats">
           <span class="directory-stat">{active.length} members</span>
@@ -459,6 +442,14 @@ app.get('/', async (c) => {
               color: var(--fg);
               -webkit-text-stroke-color: transparent;
             }
+            @media (prefers-color-scheme: dark) {
+              :root:not([data-theme="light"]) .ring-widget-leaf img {
+                filter: invert(1);
+              }
+            }
+            [data-theme="dark"] .ring-widget-leaf img {
+              filter: invert(1);
+            }
 
             .ring-widget {
               display: flex;
@@ -471,7 +462,7 @@ app.get('/', async (c) => {
               font-family: 'Space Grotesk', sans-serif;
               font-size: 4cqw;
               font-weight: 700;
-              color: var(--accent);
+              color: var(--fg);
               text-decoration: none;
               line-height: 1;
             }
@@ -910,6 +901,200 @@ app.get('/', async (c) => {
               }
             }
 
+            /* ── Panel 4: Explore (live site preview) ── */
+            .preview-inner {
+              width: 100%;
+              height: 100%;
+              position: relative;
+              overflow: hidden;
+            }
+
+            .preview-iframe-wrap {
+              position: absolute;
+              inset: 0;
+              z-index: 1;
+            }
+
+            .preview-iframe-wrap iframe {
+              width: 100%;
+              height: 100%;
+              border: none;
+              opacity: 0;
+              transition: opacity 0.4s ease;
+            }
+
+            .preview-iframe-wrap iframe.is-loaded {
+              opacity: 1;
+            }
+
+            .preview-skeleton {
+              position: absolute;
+              inset: 0;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 1.5rem;
+              z-index: 0;
+            }
+
+            .preview-skeleton-label {
+              font-family: 'Space Mono', monospace;
+              font-size: 0.8rem;
+              letter-spacing: 0.1em;
+              text-transform: uppercase;
+              color: var(--fg-muted);
+            }
+
+            .preview-skeleton-shimmer {
+              width: 60%;
+              max-width: 400px;
+              height: 4px;
+              border-radius: 2px;
+              background: linear-gradient(90deg, var(--border) 25%, var(--fg-faint) 50%, var(--border) 75%);
+              background-size: 200% 100%;
+              animation: shimmer 1.5s ease-in-out infinite;
+            }
+
+            @keyframes shimmer {
+              0% { background-position: 200% 0; }
+              100% { background-position: -200% 0; }
+            }
+
+            .preview-fallback {
+              position: absolute;
+              inset: 0;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              z-index: 2;
+            }
+
+            .preview-fallback-card {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              gap: 1rem;
+              padding: 3rem;
+              border: 1px solid var(--border);
+              border-radius: 12px;
+              max-width: 360px;
+              text-align: center;
+            }
+
+            .preview-fallback-name {
+              font-size: 1.5rem;
+              font-weight: 700;
+              letter-spacing: -0.02em;
+              color: var(--fg);
+            }
+
+            .preview-fallback-meta {
+              font-family: 'Space Mono', monospace;
+              font-size: 0.75rem;
+              color: var(--fg-muted);
+              letter-spacing: 0.05em;
+              text-transform: uppercase;
+            }
+
+            .preview-fallback-link {
+              display: inline-block;
+              padding: 0.65rem 1.5rem;
+              font-family: 'Space Grotesk', sans-serif;
+              font-size: 0.9rem;
+              font-weight: 600;
+              color: #fff;
+              background: var(--accent);
+              border-radius: 6px;
+              text-decoration: none;
+              transition: opacity 0.2s, transform 0.2s;
+            }
+
+            .preview-fallback-link:hover {
+              opacity: 0.85;
+              transform: translateY(-2px);
+            }
+
+            .preview-fallback-link:visited { color: #fff; }
+
+            .preview-controls {
+              position: absolute;
+              bottom: 0;
+              left: 0;
+              right: 0;
+              z-index: 10;
+              display: flex;
+              align-items: center;
+              gap: 1rem;
+              padding: 0.75rem 1.5rem;
+              background: color-mix(in srgb, var(--bg) 80%, transparent);
+              backdrop-filter: blur(12px);
+              -webkit-backdrop-filter: blur(12px);
+              border-top: 1px solid var(--border);
+            }
+
+            .preview-nav {
+              background: none;
+              border: 1.5px solid var(--border-strong);
+              border-radius: 50%;
+              width: 32px;
+              height: 32px;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              cursor: pointer;
+              color: var(--fg);
+              font-size: 0.9rem;
+              transition: opacity 0.2s;
+              flex-shrink: 0;
+            }
+
+            .preview-nav:hover { opacity: 0.6; }
+
+            .preview-info {
+              display: flex;
+              align-items: center;
+              gap: 0.5rem;
+              flex: 1;
+              min-width: 0;
+            }
+
+            .preview-member-name {
+              font-size: 0.9rem;
+              font-weight: 600;
+              letter-spacing: -0.01em;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .preview-member-sep { color: var(--fg-faint); }
+
+            .preview-member-city {
+              font-size: 0.8rem;
+              color: var(--fg-muted);
+              white-space: nowrap;
+            }
+
+            .preview-open {
+              font-size: 1.1rem;
+              color: var(--fg);
+              text-decoration: none;
+              flex-shrink: 0;
+              transition: opacity 0.2s;
+            }
+
+            .preview-open:hover { opacity: 0.6; }
+
+            @media (max-width: 767px) {
+              .preview-inner {
+                min-height: 80vh;
+              }
+              .preview-controls {
+                padding: 0.6rem 1rem;
+              }
+            }
+
             /* ── Panel 5: Join CTA ── */
             .join-inner {
               width: 100%;
@@ -1114,7 +1299,7 @@ app.get('/', async (c) => {
 
               {/* Panel 4: Explore */}
               <section class="panel panel--alt" data-index="3" aria-label="Explore section">
-                <SitePreviewContent active={active} />
+                <SitePreviewContent />
               </section>
 
               {/* Panel 5: Join CTA */}
@@ -1258,27 +1443,9 @@ app.get('/', async (c) => {
     ring.scrollLeft = currentPos;
   });
 })();
-
-// ── Directory list <-> ring hover interaction ──
-(function() {
-  var rows = document.querySelectorAll('.directory-row[data-member]');
-  var ringWrap = document.getElementById('directory-ring');
-  if (!rows.length || !ringWrap) return;
-  rows.forEach(function(row) {
-    var slug = row.getAttribute('data-member');
-    var node = document.getElementById('ring-node-' + slug);
-    if (!node) return;
-    row.addEventListener('mouseenter', function() {
-      ringWrap.classList.add('has-highlight');
-      node.classList.add('is-highlighted');
-    });
-    row.addEventListener('mouseleave', function() {
-      ringWrap.classList.remove('has-highlight');
-      node.classList.remove('is-highlighted');
-    });
-  });
-})();
 </script>`)}
+
+          <script src="/d3-ring.js"></script>
         </body>
       </html>
     </>
