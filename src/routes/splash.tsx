@@ -5,7 +5,7 @@ import { getActiveMembers } from '../data'
 import { CANADA_VIEWBOX, CANADA_OUTLINE_PATH, CANADA_REGION_PATHS, projectToSvg } from '../lib/canada-map'
 import { getMemberCoordinates } from '../utils/member-coords'
 
-const PANEL_NAMES = ['Splash', 'Map', 'Members', 'Ring + Stats', 'Join']
+const PANEL_NAMES = ['Splash', 'About', 'Directory', 'Join']
 
 function SplashContent({ active }: { active: Member[] }) {
   return (
@@ -15,6 +15,7 @@ function SplashContent({ active }: { active: Member[] }) {
           <span class="stretch-wide">WEBRING</span>
           <span class="stretch-wide">FOR</span>
         </h1>
+        <img src="/canada-flag.svg" alt="Flag of Canada" class="canada-flag" />
       </header>
 
       <div class="splash-map-wrap">
@@ -23,15 +24,18 @@ function SplashContent({ active }: { active: Member[] }) {
           viewBox={CANADA_VIEWBOX}
           xmlns="http://www.w3.org/2000/svg"
           role="img"
-          aria-label={`Map of Canada showing ${active.filter(m => getMemberCoordinates(m) != null).length} member locations`}
+          aria-label={`Map of Canada showing ${active.length} members`}
         >
+          {CANADA_REGION_PATHS.map((region) => (
+            <path d={region.d} class="splash-region" />
+          ))}
           <path d={CANADA_OUTLINE_PATH} class="splash-outline" />
           {active.map((m) => {
             const coords = getMemberCoordinates(m)
             if (!coords) return null
             const { x, y } = projectToSvg(coords.lat, coords.lng)
             return (
-              <circle cx={x} cy={y} r="8" class="splash-dot">
+              <circle cx={x} cy={y} r="4" class="splash-dot">
                 <title>{m.name}{m.city ? ` — ${m.city}` : ''}</title>
               </circle>
             )
@@ -43,9 +47,8 @@ function SplashContent({ active }: { active: Member[] }) {
         <div class="hero-bottom">
           <div class="hero-bottom-inner">
             <h2 class="poster-text hero-bottom-text">
-              {raw('<span class="flag-red">CA</span><span class="flag-white-outline">NA</span><span class="flag-red">DA</span>')}
+              {raw('CA<span class="flag-white-outline">NA</span>DA')}
             </h2>
-            <img src="/canada-flag.svg" alt="Flag of Canada" class="canada-flag" />
           </div>
         </div>
       </footer>
@@ -53,135 +56,75 @@ function SplashContent({ active }: { active: Member[] }) {
   )
 }
 
-function generateArcPath(x1: number, y1: number, x2: number, y2: number): string {
-  const dx = x2 - x1
-  const dy = y2 - y1
-  const dist = Math.sqrt(dx * dx + dy * dy)
-  if (dist === 0) return `M${x1},${y1} L${x2},${y2}`
-  const sweep = dist * 0.3
-  const mx = (x1 + x2) / 2 - (dy / dist) * sweep
-  const my = (y1 + y2) / 2 + (dx / dist) * sweep
-  return `M${x1},${y1} Q${mx},${my} ${x2},${y2}`
-}
-
-function MapContent({ active }: { active: Member[] }) {
-  const membersWithCoords = active.filter(m => getMemberCoordinates(m) != null)
-  const dots = membersWithCoords.map(m => {
-    const coords = getMemberCoordinates(m)!
-    return { ...m, ...projectToSvg(coords.lat, coords.lng) }
+function AboutContent() {
+  // 5 nodes on an ellipse: rx=120, ry=100, center=(200,180)
+  const rx = 120
+  const ry = 100
+  const cx = 200
+  const cy = 180
+  const nodeCount = 5
+  const nodes = Array.from({ length: nodeCount }, (_, i) => {
+    const angle = (i / nodeCount) * Math.PI * 2 - Math.PI / 2
+    return { x: cx + Math.cos(angle) * rx, y: cy + Math.sin(angle) * ry, isActive: i === 0 }
   })
 
-  // Generate arcs between consecutive members (the ring path)
-  const arcs: string[] = []
-  for (let i = 0; i < dots.length; i++) {
-    const a = dots[i]
-    const b = dots[(i + 1) % dots.length]
-    arcs.push(generateArcPath(a.x, a.y, b.x, b.y))
-  }
+  // Build ellipse path string for the dashed ring + animateMotion
+  const ellipsePath = `M${cx - rx},${cy} A${rx},${ry} 0 1,1 ${cx + rx},${cy} A${rx},${ry} 0 1,1 ${cx - rx},${cy}`
 
   return (
-    <div class="map-inner">
-      <h2 class="map-title">Our Network</h2>
-      <svg
-        class="map-svg"
-        viewBox={CANADA_VIEWBOX}
-        xmlns="http://www.w3.org/2000/svg"
-        role="img"
-        aria-label={`Interactive map of Canada showing ${dots.length} member locations connected by arcs`}
-      >
-        {/* Province outlines */}
-        {CANADA_REGION_PATHS.map((region) => (
-          <path d={region.d} class="map-region" data-region={region.postal}>
-            <title>{region.name}</title>
-          </path>
-        ))}
+    <div class="about-inner">
+      <div class="about-layout">
+        <div class="about-visual">
+          <svg
+            class="about-svg"
+            viewBox="0 0 400 360"
+            xmlns="http://www.w3.org/2000/svg"
+            role="img"
+            aria-label="Diagram showing how a webring connects member sites in a loop"
+          >
+            {/* Faint Canada outline background */}
+            <path d={CANADA_OUTLINE_PATH} class="about-ring-bg" />
 
-        {/* Country outline */}
-        <path d={CANADA_OUTLINE_PATH} class="map-outline" />
+            {/* Dashed ring path */}
+            <path d={ellipsePath} class="about-ring-path" />
 
-        {/* Connection arcs */}
-        {arcs.map((d, i) => (
-          <path d={d} class="map-arc" style={`animation-delay: ${i * 0.3}s`} />
-        ))}
+            {/* Traversal dot */}
+            <circle r="5" class="about-ring-dot">
+              <animateMotion dur="6s" repeatCount="indefinite" path={ellipsePath} />
+            </circle>
 
-        {/* Member dots */}
-        {dots.map((m, i) => (
-          <g class="map-member" style={`animation-delay: ${i * 0.15}s`}>
-            <circle cx={m.x} cy={m.y} r="12" class="map-dot-pulse" />
-            <circle cx={m.x} cy={m.y} r="7" class="map-dot" data-slug={m.slug} />
-            <text x={m.x} y={m.y - 18} class="map-label">{m.name}</text>
-          </g>
-        ))}
-      </svg>
-      <p class="map-subtitle">{dots.length} builders across Canada</p>
-    </div>
-  )
-}
-
-function RingStatsContent({ active }: { active: Member[] }) {
-  const uniqueCities = new Set(active.map(m => m.city).filter(Boolean)).size
-  const uniqueTypes = new Set(active.map(m => m.type)).size
-  // Position members around a circle
-  const ringRadius = 140
-  const cx = 200
-  const cy = 200
-
-  return (
-    <div class="ringstats-inner">
-      <div class="ringstats-layout">
-        {/* Ring visualization */}
-        <div class="ringstats-ring-wrap">
-          <svg class="ringstats-svg" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
-            {/* Outer ring */}
-            <circle cx={cx} cy={cy} r={ringRadius} class="ringstats-circle" />
-            <circle cx={cx} cy={cy} r={ringRadius - 2} class="ringstats-circle-glow" />
-
-            {/* Connection lines + member nodes */}
-            {active.map((m, i) => {
-              const angle = (i / active.length) * Math.PI * 2 - Math.PI / 2
-              const x = cx + Math.cos(angle) * ringRadius
-              const y = cy + Math.sin(angle) * ringRadius
-              const nextAngle = ((i + 1) / active.length) * Math.PI * 2 - Math.PI / 2
-              const nx = cx + Math.cos(nextAngle) * ringRadius
-              const ny = cy + Math.sin(nextAngle) * ringRadius
-              const color = TYPE_COLORS[m.type] ?? TYPE_COLORS.other
-
-              return (
-                <g style={`animation-delay: ${i * 0.15}s`} class="ringstats-node">
-                  {/* Arc segment between nodes */}
-                  <path
-                    d={`M${x},${y} A${ringRadius},${ringRadius} 0 0,1 ${nx},${ny}`}
-                    class="ringstats-arc-segment"
-                    style={`stroke: ${color}; animation-delay: ${i * 0.2}s`}
-                  />
-                  {/* Node */}
-                  <circle cx={x} cy={y} r="18" class="ringstats-node-bg" style={`fill: ${color}`} />
-                  <text x={x} y={y + 1} class="ringstats-node-initial">{m.name.charAt(0)}</text>
-                  {/* Label */}
-                  <text x={x} y={y + (y > cy ? 32 : -24)} class="ringstats-node-name">{m.name.split(' ')[0]}</text>
-                </g>
-              )
-            })}
+            {/* Site nodes */}
+            {nodes.map((n, i) => (
+              <g
+                class={`about-ring-node${n.isActive ? ' about-ring-node--active' : ''}`}
+                style={`animation-delay: ${i * 0.1}s`}
+              >
+                <rect x={n.x - 22} y={n.y - 16} width="44" height="32" rx="4" class="about-node-rect" />
+                <line x1={n.x - 22} y1={n.y - 8} x2={n.x + 22} y2={n.y - 8} class="about-node-bar" />
+                {n.isActive && (
+                  <text x={n.x} y={n.y + 30} class="about-ring-label">You</text>
+                )}
+              </g>
+            ))}
           </svg>
         </div>
 
-        {/* Stats */}
-        <div class="ringstats-stats">
-          <div class="ringstats-stat">
-            <span class="ringstats-stat-number">{active.length}</span>
-            <span class="ringstats-stat-label">Members</span>
-          </div>
-          <div class="ringstats-stat">
-            <span class="ringstats-stat-number">{uniqueCities}</span>
-            <span class="ringstats-stat-label">Cities</span>
-          </div>
-          <div class="ringstats-stat">
-            <span class="ringstats-stat-number">{uniqueTypes}</span>
-            <span class="ringstats-stat-label">Disciplines</span>
-          </div>
-          <div class="ringstats-stat">
-            <span class="ringstats-stat-number">∞</span>
-            <span class="ringstats-stat-label">The Ring</span>
+        <div class="about-text">
+          <h2 class="about-title">About</h2>
+          <div class="about-body">
+            <p>
+              webring.ca is a webring for Canadian builders — developers, designers, and founders
+              with personal sites. Each member's site links to the next, forming a ring that connects
+              creators across the country.
+            </p>
+            <p>
+              Webrings were one of the earliest ways people discovered new corners of the web.
+              We're bringing that idea back for a community that still values owning your own space online.
+            </p>
+            <p>
+              This project is open source and community-run. No algorithms, no feeds, no ads —
+              just people linking to people.
+            </p>
           </div>
         </div>
       </div>
@@ -216,34 +159,75 @@ const TYPE_COLORS: Record<string, string> = {
   other: '#D97706',
 }
 
-function MembersContent({ active }: { active: Member[] }) {
-  const displayed = active.slice(0, 6)
-  const remaining = active.length - displayed.length
+function DirectoryContent({ active }: { active: Member[] }) {
+  const uniqueCities = new Set(active.map(m => m.city).filter(Boolean)).size
+  const uniqueTypes = new Set(active.map(m => m.type)).size
+  const ringRadius = 130
+  const cx = 180
+  const cy = 180
 
   return (
-    <div class="members-inner">
-      <h2 class="members-title">The Ring</h2>
-      <div class="members-grid">
-        {displayed.map((m, i) => {
-          const color = TYPE_COLORS[m.type] ?? TYPE_COLORS.other
-          return (
-            <a href={m.url} target="_blank" rel="noopener noreferrer" class="member-card" style={`--card-accent: ${color}; animation-delay: ${i * 0.1}s`}>
-              <div class="member-card-color" style={`background: ${color}`}></div>
-              <div class="member-card-body">
-                <span class="member-card-name">{m.name}</span>
-                <span class="member-card-meta">
-                  {m.city && <span>{m.city}</span>}
-                  <span class="member-card-badge" style={`color: ${color}`}>{m.type}</span>
-                </span>
-              </div>
-              <span class="member-card-arrow">{raw('&rarr;')}</span>
-            </a>
-          )
-        })}
+    <div class="directory-inner">
+      {/* Left: member directory */}
+      <div class="directory-list-wrap">
+        <h2 class="directory-title">Directory</h2>
+        <div class="directory-list">
+          {active.map((m) => {
+            const color = TYPE_COLORS[m.type] ?? TYPE_COLORS.other
+            return (
+              <a
+                href={m.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="directory-row"
+                data-member={m.slug}
+              >
+                <span class="directory-row-indicator" style={`background: ${color}`}></span>
+                <span class="directory-row-name">{m.name}</span>
+                <span class="directory-row-city">{m.city ?? ''}</span>
+                <span class="directory-row-type" style={`color: ${color}`}>{m.type}</span>
+              </a>
+            )
+          })}
+        </div>
       </div>
-      {remaining > 0 && (
-        <p class="members-more">+{remaining} more on the ring</p>
-      )}
+
+      {/* Right: ring visualization + stats */}
+      <div class="directory-ring-wrap" id="directory-ring">
+        <svg class="directory-ring-svg" viewBox="0 0 360 360" xmlns="http://www.w3.org/2000/svg">
+          <circle cx={cx} cy={cy} r={ringRadius} class="directory-ring-circle" />
+          {active.map((m, i) => {
+            const angle = (i / active.length) * Math.PI * 2 - Math.PI / 2
+            const x = cx + Math.cos(angle) * ringRadius
+            const y = cy + Math.sin(angle) * ringRadius
+            const nextAngle = ((i + 1) / active.length) * Math.PI * 2 - Math.PI / 2
+            const nx = cx + Math.cos(nextAngle) * ringRadius
+            const ny = cy + Math.sin(nextAngle) * ringRadius
+            const color = TYPE_COLORS[m.type] ?? TYPE_COLORS.other
+
+            return (
+              <g class="ring-node" id={`ring-node-${m.slug}`}>
+                <path
+                  d={`M${x},${y} A${ringRadius},${ringRadius} 0 0,1 ${nx},${ny}`}
+                  class="ring-node-arc"
+                  style={`stroke: ${color}`}
+                />
+                <circle cx={x} cy={y} r="16" class="ring-node-bg" style={`fill: ${color}`} />
+                <text x={x} y={y + 1} class="ring-node-initial">{m.name.charAt(0)}</text>
+                <text x={x} y={y + (y > cy ? 28 : -20)} class="ring-node-label">{m.name.split(' ')[0]}</text>
+              </g>
+            )
+          })}
+        </svg>
+
+        <div class="directory-stats">
+          <span class="directory-stat">{active.length} members</span>
+          <span class="directory-stat-sep">/</span>
+          <span class="directory-stat">{uniqueCities} cities</span>
+          <span class="directory-stat-sep">/</span>
+          <span class="directory-stat">{uniqueTypes} disciplines</span>
+        </div>
+      </div>
     </div>
   )
 }
@@ -274,7 +258,7 @@ app.get('/', async (c) => {
           <style>{raw(`
             :root {
               color-scheme: light;
-              --bg: #fff;
+              --bg: #f5f3f0;
               --fg: #1a1a1a;
               --fg-muted: #888;
               --fg-faint: #bbb;
@@ -375,6 +359,12 @@ app.get('/', async (c) => {
 
             .stretch-wide { display: block; }
 
+            .splash-inner > header {
+              display: flex;
+              justify-content: space-between;
+              align-items: flex-start;
+            }
+
             .hero-top {
               font-size: 11vw;
               color: var(--fg);
@@ -396,19 +386,29 @@ app.get('/', async (c) => {
               font-size: 14cqw;
               line-height: 0.75;
               white-space: nowrap;
+              color: var(--accent);
+              -webkit-text-stroke: 4px var(--accent);
             }
 
             .canada-flag {
-              height: 10cqw;
+              height: 15.84vw;
               width: auto;
               flex-shrink: 0;
             }
 
-            .flag-red { color: var(--accent); }
-
             .flag-white-outline {
               color: transparent;
-              -webkit-text-stroke: 4px var(--accent);
+              margin-right: 0.02em;
+            }
+            @media (prefers-color-scheme: dark) {
+              :root:not([data-theme="light"]) .flag-white-outline {
+                color: var(--fg);
+                -webkit-text-stroke-color: transparent;
+              }
+            }
+            [data-theme="dark"] .flag-white-outline {
+              color: var(--fg);
+              -webkit-text-stroke-color: transparent;
             }
 
             .splash-map-wrap {
@@ -424,10 +424,17 @@ app.get('/', async (c) => {
               height: auto;
             }
 
-            .splash-outline {
+            .splash-region {
               fill: none;
               stroke: var(--border);
-              stroke-width: 1.5;
+              stroke-width: 0.5;
+              stroke-linejoin: round;
+            }
+
+            .splash-outline {
+              fill: none;
+              stroke: var(--fg-muted);
+              stroke-width: 1;
               stroke-linejoin: round;
             }
 
@@ -436,121 +443,9 @@ app.get('/', async (c) => {
               opacity: 0.7;
             }
 
-            /* ── Panel 2: Animated Map ── */
-            .map-inner {
-              width: 100%;
-              height: 100%;
-              display: flex;
-              flex-direction: column;
-              align-items: center;
-              justify-content: center;
-              padding: 3rem;
-              gap: 1.5rem;
-            }
 
-            .map-title {
-              font-size: 1rem;
-              font-family: 'Space Mono', monospace;
-              font-weight: 400;
-              letter-spacing: 0.15em;
-              text-transform: uppercase;
-              color: var(--fg-muted);
-            }
-
-            .map-subtitle {
-              font-family: 'Space Mono', monospace;
-              font-size: 0.8rem;
-              color: var(--fg-muted);
-              letter-spacing: 0.05em;
-            }
-
-            .map-svg {
-              width: 90%;
-              max-width: 900px;
-              height: auto;
-              flex-shrink: 0;
-            }
-
-            .map-region {
-              fill: none;
-              stroke: var(--border);
-              stroke-width: 0.5;
-              stroke-linejoin: round;
-              transition: fill 0.3s;
-            }
-
-            .map-region:hover {
-              fill: var(--border);
-              opacity: 0.3;
-            }
-
-            .map-outline {
-              fill: none;
-              stroke: var(--fg-muted);
-              stroke-width: 1;
-              stroke-linejoin: round;
-            }
-
-            .map-arc {
-              fill: none;
-              stroke: var(--accent);
-              stroke-width: 1.5;
-              stroke-dasharray: 6 4;
-              opacity: 0;
-              animation: arc-draw 0.8s ease-out forwards;
-            }
-
-            @keyframes arc-draw {
-              from { opacity: 0; stroke-dashoffset: 200; }
-              to { opacity: 0.4; stroke-dashoffset: 0; }
-            }
-
-            .map-member {
-              opacity: 0;
-              animation: dot-appear 0.5s ease-out forwards;
-              transform-box: fill-box;
-              transform-origin: center;
-            }
-
-            @keyframes dot-appear {
-              from { opacity: 0; transform: scale(0); }
-              to { opacity: 1; transform: scale(1); }
-            }
-
-            .map-dot {
-              fill: var(--accent);
-              cursor: pointer;
-              transition: transform 0.2s ease;
-              transform-origin: center;
-              transform-box: fill-box;
-            }
-
-            .map-dot:hover { transform: scale(1.4); }
-
-            .map-dot-pulse {
-              fill: var(--accent);
-              opacity: 0;
-              animation: pulse 2.5s ease-out infinite;
-              transform-box: fill-box;
-              transform-origin: center;
-            }
-
-            @keyframes pulse {
-              0% { opacity: 0.4; transform: scale(1); }
-              100% { opacity: 0; transform: scale(3); }
-            }
-
-            .map-label {
-              font-family: 'Space Mono', monospace;
-              font-size: 10px;
-              fill: var(--fg);
-              text-anchor: middle;
-              pointer-events: none;
-              opacity: 0.8;
-            }
-
-            /* ── Panel 3: Member Showcase ── */
-            .members-inner {
+            /* ── Panel 2: About ── */
+            .about-inner {
               width: 100%;
               height: 100%;
               display: flex;
@@ -559,9 +454,11 @@ app.get('/', async (c) => {
               justify-content: center;
               padding: 3rem;
               gap: 2rem;
+              max-width: 640px;
+              margin: 0 auto;
             }
 
-            .members-title {
+            .about-title {
               font-size: 1rem;
               font-family: 'Space Mono', monospace;
               font-weight: 400;
@@ -570,228 +467,249 @@ app.get('/', async (c) => {
               color: var(--fg-muted);
             }
 
-            .members-grid {
-              display: grid;
-              grid-template-columns: repeat(3, 1fr);
+            .about-body {
+              display: flex;
+              flex-direction: column;
               gap: 1.25rem;
-              max-width: 800px;
-              width: 100%;
-            }
-
-            .member-card {
-              display: flex;
-              flex-direction: column;
-              border: 1px solid var(--border);
-              border-radius: 8px;
-              overflow: hidden;
-              text-decoration: none;
-              color: var(--fg);
-              transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
-              opacity: 0;
-              animation: card-in 0.4s ease-out forwards;
-            }
-
-            @keyframes card-in {
-              from { opacity: 0; transform: translateY(16px); }
-              to { opacity: 1; transform: translateY(0); }
-            }
-
-            .member-card:hover {
-              transform: translateY(-4px);
-              box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-              border-color: var(--card-accent);
-            }
-
-            .member-card-color {
-              height: 6px;
-              width: 100%;
-            }
-
-            .member-card-body {
-              padding: 1.25rem 1rem 1rem;
-              display: flex;
-              flex-direction: column;
-              gap: 0.5rem;
-              flex: 1;
-            }
-
-            .member-card-name {
+              font-family: 'Space Grotesk', sans-serif;
               font-size: 1.1rem;
-              font-weight: 700;
-              letter-spacing: -0.02em;
+              line-height: 1.7;
+              color: var(--fg);
             }
 
-            .member-card-meta {
-              display: flex;
-              align-items: center;
-              gap: 0.5rem;
-              font-size: 0.8rem;
-              color: var(--fg-muted);
+            .about-body p {
+              margin: 0;
             }
 
-            .member-card-badge {
-              font-family: 'Space Mono', monospace;
-              font-size: 0.7rem;
-              font-weight: 700;
-              letter-spacing: 0.05em;
-              text-transform: uppercase;
-            }
-
-            .member-card-arrow {
-              padding: 0.75rem 1rem;
-              text-align: right;
-              font-size: 1.2rem;
-              color: var(--fg-faint);
-              transition: color 0.2s;
-            }
-
-            .member-card:hover .member-card-arrow {
-              color: var(--card-accent);
-            }
-
-            .members-more {
-              font-family: 'Space Mono', monospace;
-              font-size: 0.8rem;
-              color: var(--fg-muted);
-              letter-spacing: 0.05em;
-            }
-
-            @media (max-width: 767px) {
-              .members-grid {
-                grid-template-columns: 1fr;
-                max-width: 400px;
-              }
-            }
-
-            /* ── Panel 4: Ring + Stats ── */
-            .ringstats-inner {
+            /* ── Panel 3: Directory (split layout) ── */
+            .directory-inner {
               width: 100%;
               height: 100%;
               display: flex;
-              align-items: center;
-              justify-content: center;
+              align-items: stretch;
               padding: 3rem;
+              gap: 3rem;
+              max-width: 1200px;
+              margin: 0 auto;
             }
 
-            .ringstats-layout {
+            /* Left: directory list */
+            .directory-list-wrap {
+              flex: 0 0 45%;
               display: flex;
-              align-items: center;
-              gap: 5rem;
-              max-width: 900px;
+              flex-direction: column;
+              gap: 1.5rem;
+              min-width: 0;
+              overflow: hidden;
             }
 
-            .ringstats-ring-wrap {
+            .directory-title {
+              font-size: 0.85rem;
+              font-family: 'Space Mono', monospace;
+              font-weight: 400;
+              letter-spacing: 0.15em;
+              text-transform: uppercase;
+              color: var(--fg-muted);
               flex-shrink: 0;
             }
 
-            .ringstats-svg {
-              width: 360px;
-              height: 360px;
+            .directory-list {
+              display: flex;
+              flex-direction: column;
+              overflow-y: auto;
+              flex: 1;
+              scrollbar-width: thin;
+              scrollbar-color: var(--border) transparent;
             }
 
-            .ringstats-circle {
+            .directory-row {
+              display: flex;
+              align-items: center;
+              gap: 0.75rem;
+              padding: 0.6rem 0;
+              border-bottom: 1px solid var(--border);
+              text-decoration: none;
+              color: var(--fg);
+              transition: background 0.15s, padding-left 0.15s;
+            }
+
+            .directory-row:first-child {
+              border-top: 1px solid var(--border);
+            }
+
+            .directory-row:hover {
+              background: color-mix(in srgb, var(--fg) 4%, transparent);
+              padding-left: 0.25rem;
+            }
+
+            .directory-row-indicator {
+              width: 3px;
+              height: 1.2rem;
+              border-radius: 1px;
+              flex-shrink: 0;
+            }
+
+            .directory-row-name {
+              font-size: 0.95rem;
+              font-weight: 600;
+              letter-spacing: -0.01em;
+              flex: 1;
+              min-width: 0;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            }
+
+            .directory-row-city {
+              font-size: 0.8rem;
+              color: var(--fg-muted);
+              flex-shrink: 0;
+            }
+
+            .directory-row-type {
+              font-family: 'Space Mono', monospace;
+              font-size: 0.65rem;
+              font-weight: 700;
+              letter-spacing: 0.05em;
+              text-transform: uppercase;
+              flex-shrink: 0;
+              width: 5.5rem;
+              text-align: right;
+            }
+
+            /* Right: ring + stats */
+            .directory-ring-wrap {
+              flex: 1;
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              gap: 1.5rem;
+              min-width: 0;
+            }
+
+            .directory-ring-svg {
+              width: 100%;
+              max-width: 340px;
+              height: auto;
+            }
+
+            .directory-ring-circle {
               fill: none;
               stroke: var(--border);
               stroke-width: 1;
             }
 
-            .ringstats-circle-glow {
+            .ring-node {
+              transition: opacity 0.2s;
+            }
+
+            .ring-node-arc {
               fill: none;
-              stroke: var(--accent);
-              stroke-width: 0.5;
-              opacity: 0.2;
+              stroke-width: 2.5;
+              opacity: 0.5;
+              transition: opacity 0.2s, stroke-width 0.2s;
             }
 
-            .ringstats-arc-segment {
-              fill: none;
-              stroke-width: 3;
-              opacity: 0;
-              animation: arc-segment-in 0.6s ease-out forwards;
-            }
-
-            @keyframes arc-segment-in {
-              from { opacity: 0; }
-              to { opacity: 0.6; }
-            }
-
-            .ringstats-node {
-              opacity: 0;
-              animation: dot-appear 0.5s ease-out forwards;
-              transform-box: fill-box;
-              transform-origin: center;
-            }
-
-            .ringstats-node-bg {
-              opacity: 0.9;
-              transition: transform 0.2s;
+            .ring-node-bg {
+              opacity: 0.85;
+              transition: transform 0.2s, opacity 0.2s;
               transform-origin: center;
               transform-box: fill-box;
-              cursor: pointer;
             }
 
-            .ringstats-node-bg:hover { transform: scale(1.15); }
-
-            .ringstats-node-initial {
+            .ring-node-initial {
               fill: #fff;
               font-family: 'Space Grotesk', sans-serif;
-              font-size: 14px;
+              font-size: 12px;
               font-weight: 700;
               text-anchor: middle;
               dominant-baseline: central;
               pointer-events: none;
             }
 
-            .ringstats-node-name {
+            .ring-node-label {
               fill: var(--fg);
               font-family: 'Space Mono', monospace;
-              font-size: 9px;
+              font-size: 8px;
               text-anchor: middle;
               pointer-events: none;
-              opacity: 0.7;
+              opacity: 0.6;
+              transition: opacity 0.2s;
             }
 
-            .ringstats-stats {
+            /* Hover highlight states */
+            .directory-ring-wrap.has-highlight .ring-node {
+              opacity: 0.25;
+            }
+
+            .directory-ring-wrap.has-highlight .ring-node.is-highlighted {
+              opacity: 1;
+            }
+
+            .ring-node.is-highlighted .ring-node-bg {
+              transform: scale(1.25);
+              opacity: 1;
+            }
+
+            .ring-node.is-highlighted .ring-node-label {
+              opacity: 1;
+            }
+
+            .ring-node.is-highlighted .ring-node-arc {
+              opacity: 0.9;
+              stroke-width: 3.5;
+            }
+
+            /* Compact stats */
+            .directory-stats {
               display: flex;
-              flex-direction: column;
-              gap: 2.5rem;
-            }
-
-            .ringstats-stat {
-              display: flex;
-              flex-direction: column;
-              gap: 0.25rem;
-            }
-
-            .ringstats-stat-number {
-              font-size: 4rem;
-              font-weight: 800;
-              letter-spacing: -0.04em;
-              line-height: 1;
-              color: var(--fg);
-            }
-
-            .ringstats-stat-label {
+              align-items: center;
+              gap: 0.5rem;
               font-family: 'Space Mono', monospace;
-              font-size: 0.75rem;
-              letter-spacing: 0.1em;
-              text-transform: uppercase;
+              font-size: 0.7rem;
+              letter-spacing: 0.05em;
               color: var(--fg-muted);
+              text-transform: uppercase;
             }
 
+            .directory-stat-sep {
+              color: var(--fg-faint);
+            }
+
+            /* Mobile: directory stacks vertically */
             @media (max-width: 767px) {
-              .ringstats-layout {
+              .directory-inner {
                 flex-direction: column;
-                gap: 2rem;
-              }
-              .ringstats-svg { width: 280px; height: 280px; }
-              .ringstats-stats {
-                flex-direction: row;
-                flex-wrap: wrap;
+                padding: 2rem 1.5rem;
                 gap: 1.5rem;
-                justify-content: center;
               }
-              .ringstats-stat { align-items: center; }
-              .ringstats-stat-number { font-size: 2.5rem; }
+
+              .directory-list-wrap {
+                flex: none;
+                order: 2;
+              }
+
+              .directory-ring-wrap {
+                flex: none;
+                order: 1;
+              }
+
+              .directory-ring-svg {
+                max-width: 220px;
+              }
+
+              .directory-list {
+                max-height: calc(100vh - 360px);
+              }
+
+              .directory-row-city {
+                display: none;
+              }
+
+              .directory-row-type {
+                width: auto;
+              }
             }
 
             /* ── Panel 5: Join CTA ── */
@@ -968,7 +886,8 @@ app.get('/', async (c) => {
               }
 
               .hero-top { font-size: 16vw; }
-              .flag-white-outline { -webkit-text-stroke: 2px var(--accent); }
+              .canada-flag { height: 23.04vw; }
+              .hero-bottom-text { -webkit-text-stroke: 2px var(--accent); }
             }
           `)}</style>
         </head>
@@ -985,23 +904,18 @@ app.get('/', async (c) => {
                 <SplashContent active={active} />
               </section>
 
-              {/* Panel 2: Animated Map */}
-              <section class="panel panel--alt" data-index="1" aria-label="Map section">
-                <MapContent active={active} />
+              {/* Panel 2: About */}
+              <section class="panel panel--alt" data-index="1" aria-label="About section">
+                <AboutContent />
               </section>
 
-              {/* Panel 3: Member Showcase */}
-              <section class="panel" data-index="2" aria-label="Members section">
-                <MembersContent active={active} />
+              {/* Panel 3: Directory */}
+              <section class="panel" data-index="2" aria-label="Directory section">
+                <DirectoryContent active={active} />
               </section>
 
-              {/* Panel 4: Ring + Stats */}
-              <section class="panel panel--alt" data-index="3" aria-label="Ring + Stats section">
-                <RingStatsContent active={active} />
-              </section>
-
-              {/* Panel 5: Join CTA */}
-              <section class="panel" data-index="4" aria-label="Join section">
+              {/* Panel 4: Join CTA */}
+              <section class="panel panel--alt" data-index="3" aria-label="Join section">
                 <JoinContent memberCount={active.length} />
               </section>
 
@@ -1038,13 +952,21 @@ app.get('/', async (c) => {
 
   // Tuning
   const SCROLL_EASE = 0.12;
+  const STEPS_PER_PANEL = 100;
+  let scrollAccum = 0;
 
   ring.scrollLeft = currentPos;
 
   // ── Wheel handler ──
   ring.addEventListener('wheel', (e) => {
     e.preventDefault();
-    targetPos += e.deltaY;
+    scrollAccum += e.deltaY;
+    const stepSize = panelW / STEPS_PER_PANEL;
+    const steps = Math.trunc(scrollAccum / stepSize);
+    if (steps !== 0) {
+      targetPos += steps * stepSize;
+      scrollAccum -= steps * stepSize;
+    }
 
     if (!hasScrolled) {
       hasScrolled = true;
@@ -1062,18 +984,13 @@ app.get('/', async (c) => {
 
   // ── Keyboard navigation ──
   document.addEventListener('keydown', (e) => {
-    let currentIdx, nextIdx;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
       e.preventDefault();
-      currentIdx = Math.round((currentPos - CLONE_BEFORE * panelW) / panelW);
-      nextIdx = (currentIdx + 1) % PANEL_COUNT;
-      targetPos = (CLONE_BEFORE + nextIdx) * panelW;
+      targetPos += panelW;
       if (!hasScrolled) { hasScrolled = true; hint.classList.add('is-hidden'); }
     } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
       e.preventDefault();
-      currentIdx = Math.round((currentPos - CLONE_BEFORE * panelW) / panelW);
-      nextIdx = (currentIdx - 1 + PANEL_COUNT) % PANEL_COUNT;
-      targetPos = (CLONE_BEFORE + nextIdx) * panelW;
+      targetPos -= panelW;
       if (!hasScrolled) { hasScrolled = true; hint.classList.add('is-hidden'); }
     }
   });
@@ -1136,6 +1053,26 @@ app.get('/', async (c) => {
     currentPos = (CLONE_BEFORE + idx) * panelW;
     targetPos = currentPos;
     ring.scrollLeft = currentPos;
+  });
+})();
+
+// ── Directory list <-> ring hover interaction ──
+(function() {
+  var rows = document.querySelectorAll('.directory-row[data-member]');
+  var ringWrap = document.getElementById('directory-ring');
+  if (!rows.length || !ringWrap) return;
+  rows.forEach(function(row) {
+    var slug = row.getAttribute('data-member');
+    var node = document.getElementById('ring-node-' + slug);
+    if (!node) return;
+    row.addEventListener('mouseenter', function() {
+      ringWrap.classList.add('has-highlight');
+      node.classList.add('is-highlighted');
+    });
+    row.addEventListener('mouseleave', function() {
+      ringWrap.classList.remove('has-highlight');
+      node.classList.remove('is-highlighted');
+    });
   });
 })();
 </script>`)}
