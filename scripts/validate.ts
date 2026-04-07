@@ -145,7 +145,8 @@ for (const { current, base, changedFields } of editedMembers) {
           if (detectWidget(body, current.slug)) {
             write('- PASS: Webring widget detected')
           } else {
-            write('- INFO: Widget not detected on new URL. Make sure to install the widget — see https://github.com/stanleypangg/webring.ca#add-the-widget')
+            write('- FAIL: Widget not detected on new URL. Install the widget before merging — see https://github.com/stanleypangg/webring.ca#add-the-widget')
+            memberFailed = true
           }
         } else {
           write(`- FAIL: ${safeUrl} returned HTTP ${res.status}. The site must return a 2xx status code.`)
@@ -234,7 +235,8 @@ for (const member of newMembers) {
       if (detectWidget(body, member.slug)) {
         write('- PASS: Webring widget detected')
       } else {
-        write('- INFO: Widget not detected yet. Install the widget before or after merge — see https://github.com/stanleypangg/webring.ca#add-the-widget')
+        write('- FAIL: Widget not detected. Install the widget before merging — see https://github.com/stanleypangg/webring.ca#add-the-widget')
+        memberFailed = true
       }
     } else {
       write(`- FAIL: ${safeUrl} returned HTTP ${res.status}. The site must return a 2xx status code.`)
